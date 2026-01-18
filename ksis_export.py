@@ -4,12 +4,15 @@ import csv
 import argparse
 import sys
 import os
+import time
 from datetime import datetime
 from bs4 import BeautifulSoup
 
+# Note: Pandas is imported only when needed to speed up script startup
+
 # Enable ANSI colors on Windows
 if sys.platform == "win32":
-    os.system("")  # Enable ANSI escape sequences on Windows 10+
+    os.system("")
 
 # ANSI color codes
 class Colors:
@@ -22,43 +25,194 @@ class Colors:
     RESET = '\033[0m'
     BOLD = '\033[1m'
 
-# Global debug flag
+# Global flags and caches
 DEBUG = False
-NAME_CACHE = {}  # Cache for multi-word name decisions
+NAME_CACHE = {}
+CLUB_CORRECTIONS = {}
+ATHLETE_CORRECTIONS = {}
+
+# Configuration for Columns
+# 1. DROP_COLS: These columns are completely removed from the CSV
+#    Removed 'SV' from here so we can capture it
+DROP_COLS = ['E', 'Bonus', 'Comp', 'ND', 'D'] 
+
+# 2. RENAME_MAP: Renames headers found in HTML -> CSV Header
+#    Added 'SV': 'Score' back. This forces the data found in the SV column to appear under 'Score'
+RENAME_MAP = {
+    'Total': 'Score',
+    'SV': 'Score',    # Maps SV column data to the Score column
+    'Born': 'YOB', 
+    'born': 'YOB'
+} 
 
 def debug_print(message):
     """Print message only if DEBUG is enabled."""
     if DEBUG:
-        print(message)
+        print(f"{Colors.MAGENTA}[DEBUG] {message}{Colors.RESET}")
+
+# ==========================================
+#  FILE LOADING / SAVING FUNCTIONS
+# ==========================================
+
+def load_excel_corrections(filename):
+    """Generic helper to load corrections from Excel (Col A -> Col B)."""
+    if not os.path.exists(filename):
+        return {}
+    
+    try:
+        import pandas as pd
+        # Force reading only the first two columns to prevent "shifting" data
+        df = pd.read_excel(filename, header=None, usecols=[0, 1])
+        
+        if df.empty: return {}
+        
+        # Manually assign headers to ensure consistency
+        df.columns = ['Original', 'Corrected']
+        
+        # If the file had headers "Original/Corrected", remove that row
+        if str(df.iloc[0]['Original']).strip().lower() == 'original':
+            df = df.iloc[1:]
+
+        return dict(zip(
+            df['Original'].astype(str).str.strip(), 
+            df['Corrected'].astype(str).str.strip()
+        ))
+    except Exception as e:
+        debug_print(f"Error loading {filename}: {e}")
+        return {}
+
+def load_corrections():
+    """Load both Club and Athlete corrections."""
+    global CLUB_CORRECTIONS, ATHLETE_CORRECTIONS
+    
+    debug_print("Loading corrections dictionaries...")
+    
+    CLUB_CORRECTIONS = load_excel_corrections("Club Name Corrections.xlsx")
+    if CLUB_CORRECTIONS and DEBUG:
+        debug_print(f"✓ Loaded {len(CLUB_CORRECTIONS)} club corrections.")
+        
+    ATHLETE_CORRECTIONS = load_excel_corrections("Athlete Name Corrections.xlsx")
+    if ATHLETE_CORRECTIONS and DEBUG:
+        debug_print(f"✓ Loaded {len(ATHLETE_CORRECTIONS)} athlete name corrections.")
+
+def save_athlete_correction(original, corrected):
+    """Appends a new athlete correction to the Excel file."""
+    filename = "Athlete Name Corrections.xlsx"
+    try:
+        import pandas as pd
+        new_row = pd.DataFrame([[original, corrected]], columns=['Original', 'Corrected'])
+        
+        if os.path.exists(filename):
+            existing_df = pd.read_excel(filename, header=None, usecols=[0, 1])
+            if not existing_df.empty:
+                existing_df.columns = ['Original', 'Corrected']
+                if str(existing_df.iloc[0]['Original']).strip().lower() == 'original':
+                    existing_df = existing_df.iloc[1:]
+            else:
+                existing_df = pd.DataFrame(columns=['Original', 'Corrected'])
+            updated_df = pd.concat([existing_df, new_row], ignore_index=True)
+        else:
+            updated_df = new_row
+            
+        updated_df.to_excel(filename, index=False, header=True)
+        print(f"{Colors.GREEN}✓ Saved correction to '{filename}'{Colors.RESET}")
+        
+        # Update memory
+        ATHLETE_CORRECTIONS[original] = corrected
+    except Exception as e:
+        print(f"{Colors.RED}⚠ Error saving correction: {e}{Colors.RESET}")
+
+# ==========================================
+#  STANDARDIZATION LOGIC
+# ==========================================
+
+def standardize_club(club_name):
+    if not club_name: return ""
+    clean_name = club_name.strip()
+    
+    # 1. Dictionary Check
+    if clean_name in CLUB_CORRECTIONS:
+        clean_name = CLUB_CORRECTIONS[clean_name].strip()
+        
+    # 2. Suffix Removal
+    suffix_pattern = r'\s+(?:Inc\.?\s+ON|ON\s+Inc\.?|Inc\.?|ON)$'
+    clean_name = re.sub(suffix_pattern, '', clean_name, flags=re.IGNORECASE).strip()
+    
+    return clean_name
+
+def reorder_name(name):
+    global NAME_CACHE
+    
+    # Normalize whitespace
+    name = re.sub(r'\s+', ' ', name).strip()
+    
+    # 1. Check Excel Cache
+    if name in ATHLETE_CORRECTIONS:
+        return ATHLETE_CORRECTIONS[name]
+    
+    # 2. Check Runtime Cache
+    if name in NAME_CACHE:
+        return NAME_CACHE[name]
+    
+    parts = name.split()
+    result = name
+    
+    if len(parts) == 1:
+        result = name
+    elif len(parts) == 2:
+        result = f"{parts[1]} {parts[0]}"
+    else:
+        print(f"\n{Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}")
+        print(f"{Colors.YELLOW}Multiple-word name detected: {Colors.BOLD}{name}{Colors.RESET}")
+        print(f"{Colors.CYAN}This name is in 'Last First' format. Where does the LAST name end?{Colors.RESET}")
+        
+        for i in range(1, len(parts)):
+            last_name = ' '.join(parts[:i])
+            first_name = ' '.join(parts[i:])
+            reordered = f"{first_name} {last_name}"
+            print(f"{Colors.CYAN}{i}.{Colors.RESET} Last: {Colors.BOLD}{last_name}{Colors.RESET}, First: {Colors.BOLD}{first_name}{Colors.RESET} → {Colors.GREEN}{reordered}{Colors.RESET}")
+        
+        while True:
+            choice = input(f"{Colors.CYAN}Enter choice (1-{len(parts)-1}): {Colors.RESET}").strip()
+            if choice.isdigit() and 1 <= int(choice) < len(parts):
+                split_point = int(choice)
+                last_name = ' '.join(parts[:split_point])
+                first_name = ' '.join(parts[split_point:])
+                result = f"{first_name} {last_name}"
+                
+                # Save and Cache
+                save_athlete_correction(name, result)
+                print(f"{Colors.GREEN}✓ Saved as: {result}{Colors.RESET}")
+                print(f"{Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}")
+                break
+            else:
+                print(f"{Colors.RED}Invalid choice. Please enter a number between 1 and {len(parts)-1}.{Colors.RESET}")
+    
+    NAME_CACHE[name] = result
+    return result
+
+# ==========================================
+#  SCRAPING FUNCTIONS
+# ==========================================
 
 def safe_find_text(soup, tag, default="Unknown"):
-    """Safely extract text from a tag, returning default if not found."""
     element = soup.find(tag)
     return element.get_text().strip() if element else default
 
 def parse_date(date_string):
-    """Parse date from various formats, returning ISO format (YYYY-MM-DD)."""
     try:
-        # Try to find a date pattern like "DD.MM.YYYY"
         date_match = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', date_string)
         if date_match:
             day, month, year = date_match.groups()
             return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        
-        # Try alternative format "YYYY-MM-DD"
         date_match = re.search(r'(\d{4})-(\d{1,2})-(\d{1,2})', date_string)
-        if date_match:
-            return date_match.group(0)
-            
-    except Exception as e:
-        debug_print(f"Warning: Could not parse date from '{date_string}': {e}")
-    
-    return "Unknown"
+        if date_match: return date_match.group(0)
+    except Exception: pass
+    return datetime.now().strftime("%Y-%m-%d")
 
 def fetch_url(url):
-    """Fetch URL with error handling."""
+    time.sleep(0.5)
     try:
-        # Add headers to mimic a real browser
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -67,142 +221,81 @@ def fetch_url(url):
             'Upgrade-Insecure-Requests': '1'
         }
         debug_print(f"  Fetching: {url[:80]}...")
-        response = requests.get(url, headers=headers, timeout=10)
-        debug_print(f"  Status code: {response.status_code}")
-        debug_print(f"  Content-Encoding: {response.headers.get('Content-Encoding', 'none')}")
+        response = requests.get(url, headers=headers, timeout=15)
         response.raise_for_status()
-        
-        # Force proper decoding
         response.encoding = response.apparent_encoding or 'utf-8'
-        
         debug_print(f"  Received {len(response.text)} characters")
         return response.text
     except requests.exceptions.RequestException as e:
         print(f"  {Colors.RED}✗ Error fetching URL: {e}{Colors.RESET}")
         return None
 
-def reorder_name(name):
-    """Reorder name from 'Last First' to 'First Last' format.
+def parse_row_data(row, headers):
+    """Dynamically map row cells to headers."""
+    cells = row.find_all('td')
+    if not cells or len(cells) < 4: return None
     
-    For names with 3+ words, prompts user to determine the split point.
-    Names are displayed in their original "Last First" order for clarity.
-    Caches decisions to avoid repeated prompts for the same name.
-    """
-    global NAME_CACHE
-    
-    # Normalize whitespace
-    name = re.sub(r'\s+', ' ', name).strip()
-    
-    # Check cache first
-    if name in NAME_CACHE:
-        return NAME_CACHE[name]
-    
-    parts = name.split()
-    
-    if len(parts) == 1:
-        # Single name, return as-is
-        result = name
-    elif len(parts) == 2:
-        # Simple case: "Last First" -> "First Last"
-        result = f"{parts[1]} {parts[0]}"
-    else:
-        # 3+ words: ask user where to split
-        print(f"\n{Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}")
-        print(f"{Colors.YELLOW}Multiple-word name detected: {Colors.BOLD}{name}{Colors.RESET}")
-        print(f"{Colors.CYAN}This name is in 'Last First' format. Where does the LAST name end?{Colors.RESET}")
-        
-        # Show options (interpreting as "Last... First..." from left to right)
-        for i in range(1, len(parts)):
-            last_name = ' '.join(parts[:i])
-            first_name = ' '.join(parts[i:])
-            reordered = f"{first_name} {last_name}"
-            print(f"{Colors.CYAN}{i}.{Colors.RESET} Last: {Colors.BOLD}{last_name}{Colors.RESET}, First: {Colors.BOLD}{first_name}{Colors.RESET} → {Colors.GREEN}{reordered}{Colors.RESET}")
-        
-        # Get user input
-        while True:
-            choice = input(f"{Colors.CYAN}Enter choice (1-{len(parts)-1}): {Colors.RESET}").strip()
-            
-            if choice.isdigit() and 1 <= int(choice) < len(parts):
-                split_point = int(choice)
-                last_name = ' '.join(parts[:split_point])
-                first_name = ' '.join(parts[split_point:])
-                result = f"{first_name} {last_name}"
-                print(f"{Colors.GREEN}✓ Saved as: {result}{Colors.RESET}")
-                print(f"{Colors.YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.RESET}")
-                break
-            else:
-                print(f"{Colors.RED}Invalid choice. Please enter a number between 1 and {len(parts)-1}.{Colors.RESET}")
-    
-    # Cache the result
-    NAME_CACHE[name] = result
-    return result
+    cell_values = [re.sub(r'\s+', ' ', c.get_text(strip=True)) for c in cells]
+    row_dict = {}
 
-def parse_athlete_row(row_data):
-    """Parse athlete information from table row."""
-    try:
-        # Extract athlete info
-        row_ath = row_data[2]
-        
-        debug_print(f"\n=== Raw athlete cell HTML ===")
-        debug_print(row_ath[:500])
-        debug_print("=" * 30)
-        
-        # Split by <br/> or <br>
-        parts = re.split(r'<br\s*/?>', row_ath, maxsplit=1)
-        if len(parts) < 2:
-            return None
-        
-        row_name = parts[0]
-        row_club = parts[1]
-        
-        # Try to extract name from anchor tag with data attributes or onclick
-        # Look for potential data in the link that might indicate first/last name split
-        soup_cell = BeautifulSoup(row_ath, 'html.parser')
-        link = soup_cell.find('a')
-        
-        if link:
-            # Check for onclick or other attributes that might contain name data
-            onclick = link.get('onclick', '')
-            href = link.get('href', '')
-            title = link.get('title', '')
-            
-            debug_print(f"Link text: {link.get_text()}")
-            debug_print(f"Link onclick: {onclick}")
-            debug_print(f"Link href: {href}")
-            debug_print(f"Link title: {title}")
-            debug_print(f"All link attributes: {link.attrs}")
-            
-            # Extract the visible name text
-            row_name = link.get_text().strip()
-        else:
-            # No link, just extract text
-            name_match = re.search(r'>([^<]+)</a', row_name)
-            if name_match:
-                row_name = name_match.group(1).strip()
-            else:
-                row_name = re.sub(r'<.*?>', '', row_name).strip()
-        
-        # Normalize whitespace
-        row_name = re.sub(r'\s+', ' ', row_name)
-        
-        debug_print(f"Extracted name: {row_name}")
-        
-        # Reorder name from "Last First" to "First Last"
-        row_name = reorder_name(row_name)
-        debug_print(f"Reordered name: {row_name}")
-        
-        # Clean club
-        row_club = re.sub(r'<.*?>', '', row_club).strip()
-        
-        # Extract other fields
-        row_yob = re.sub(r'<.*?>', '', row_data[3]).strip()
-        row_score = re.sub(r'<.*?>', '', row_data[8]).strip()
-        
-        return [row_name, row_club, row_yob, row_score]
+    # 1. Handle Athlete/Club Column
+    ath_idx = -1
+    for i, h in enumerate(headers):
+        if 'name' in h.lower() or 'gymnast' in h.lower(): ath_idx = i; break
+    if ath_idx == -1 and len(cells) > 2: ath_idx = 2
+
+    # 2. Handle YOB Column
+    yob_idx = -1
+    for i, h in enumerate(headers):
+        if 'born' in h.lower() or 'yob' in h.lower(): yob_idx = i; break
     
-    except (IndexError, AttributeError) as e:
-        debug_print(f"Warning: Could not parse row: {e}")
-        return None
+    if yob_idx == -1 and len(cells) > 3:
+        if cells[3].get_text(strip=True).isdigit() and len(cells[3].get_text(strip=True)) == 4:
+            yob_idx = 3
+
+    try:
+        if ath_idx < len(cells):
+            raw_html = str(cells[ath_idx])
+            soup_cell = BeautifulSoup(raw_html, 'html.parser')
+            link = soup_cell.find('a')
+            if link:
+                raw_name = link.get_text().strip()
+            else:
+                raw_name = BeautifulSoup(re.split(r'<br\s*/?>', raw_html)[0], 'html.parser').get_text().strip()
+                
+            row_dict['Name'] = reorder_name(raw_name)
+            
+            parts = re.split(r'<br\s*/?>', raw_html)
+            raw_club = ""
+            if len(parts) > 1:
+                raw_club = BeautifulSoup(parts[1], 'html.parser').get_text().strip()
+            row_dict['Club'] = standardize_club(raw_club)
+    except Exception:
+        row_dict['Name'] = "Unknown"
+        row_dict['Club'] = "Unknown"
+
+    if yob_idx != -1 and yob_idx < len(cells):
+        row_dict['YOB'] = cell_values[yob_idx]
+
+    # 3. Map remaining columns
+    for i, (header, val) in enumerate(zip(headers, cell_values)):
+        if i == ath_idx: continue
+        if i == yob_idx: continue
+        
+        # Apply Rename Logic
+        clean_header = header.strip()
+        if clean_header in RENAME_MAP:
+            clean_header = RENAME_MAP[clean_header]
+            
+        if not clean_header: clean_header = f"Col_{i}"
+        
+        row_dict[clean_header] = val
+
+    return row_dict
+
+# ==========================================
+#  MAIN LOGIC
+# ==========================================
 
 def get_prop_id():
     """Get and validate prop_id from user input."""
@@ -220,12 +313,7 @@ def get_prop_id():
         return prop_id
 
 def list_competitions(live_only=False, search_keyword=None):
-    """Fetch and display list of competitions from ksis.eu.
-    
-    Args:
-        live_only: If True, only show competitions with LIVE sessions
-        search_keyword: If provided, filter competitions by keyword
-    """
+    """Fetch and display list of competitions from ksis.eu."""
     filter_desc = ""
     if live_only:
         filter_desc = " (Live competitions only)"
@@ -236,53 +324,33 @@ def list_competitions(live_only=False, search_keyword=None):
     
     url = "https://ksis.eu/menu.php?akcia=S&oblast=ARTW&country=CAN"
     html_content = fetch_url(url)
-    
     if not html_content:
         print(f"{Colors.RED}Failed to fetch competition list.{Colors.RESET}")
         return []
     
     soup = BeautifulSoup(html_content, "html.parser")
-    
-    # Find all competition links
     all_competitions = []
-    links = soup.find_all('a', href=True)
     
-    for link in links:
-        href = link.get('href')
-        # Look for links with id_prop parameter
-        match = re.search(r'id_prop=(\d+)', href)
-        if match:
-            prop_id = match.group(1)
-            comp_name = link.get_text().strip()
-            
-            # Check if this link has a LIVE badge (span with class badge containing "live")
+    for link in soup.find_all('a', href=True):
+        if 'id_prop=' in link['href']:
+            pid = re.search(r'id_prop=(\d+)', link['href']).group(1)
+            name = link.get_text().strip()
             is_live = False
-            parent = link.parent
-            if parent:
-                badges = parent.find_all('span', class_='badge')
-                for badge in badges:
-                    if 'live' in badge.get_text().lower():
-                        is_live = True
-                        break
-            
-            # Skip empty names or duplicates
-            if comp_name and not any(c['prop_id'] == prop_id for c in all_competitions):
-                all_competitions.append({
-                    'prop_id': prop_id,
-                    'name': comp_name,
-                    'is_live': is_live
-                })
-    
+            if link.parent:
+                for badge in link.parent.find_all('span', class_='badge'):
+                     if 'live' in badge.get_text().lower(): is_live = True
+
+            if name and not any(c['prop_id'] == pid for c in all_competitions):
+                all_competitions.append({'prop_id': pid, 'name': name, 'is_live': is_live})
+
     # Apply filters
     competitions = all_competitions
-    
     if live_only:
         competitions = [c for c in competitions if c['is_live']]
-    
     if search_keyword:
         keyword_lower = search_keyword.lower()
         competitions = [c for c in competitions if keyword_lower in c['name'].lower()]
-    
+
     if not competitions:
         if live_only:
             print(f"{Colors.YELLOW}No live competitions found.{Colors.RESET}")
@@ -291,167 +359,116 @@ def list_competitions(live_only=False, search_keyword=None):
         else:
             print(f"{Colors.YELLOW}No competitions found.{Colors.RESET}")
         return []
-    
-    # Display competitions
+
     print(f"\n{Colors.BOLD}Available Competitions:{Colors.RESET}")
     print(f"{Colors.CYAN}{'ID':<8} {'Competition Name'}{Colors.RESET}")
     print("-" * 80)
-    
     for comp in competitions:
         live_indicator = f" {Colors.RED}[LIVE]{Colors.RESET}" if comp['is_live'] else ""
         print(f"{Colors.GREEN}{comp['prop_id']:<8}{Colors.RESET} {comp['name']}{live_indicator}")
     
     print(f"\n{Colors.BOLD}Total: {len(competitions)} competitions{Colors.RESET}")
-    
     return competitions
 
 def export_results(prop_id):
     """Export results for a given prop_id."""
+    # Ensure corrections are loaded
+    load_corrections()
+    
     url = f"https://ksis.eu/resultx.php?id_prop={prop_id}"
-    
     print(f"\n{Colors.CYAN}Fetching competition data (prop_id: {prop_id})...{Colors.RESET}")
-    html_content = fetch_url(url)
     
+    html_content = fetch_url(url)
     if not html_content:
         print(f"{Colors.RED}Failed to fetch competition page. Exiting...{Colors.RESET}")
         return
     
-    debug_print(f"✓ Received {len(html_content)} characters of HTML")
-    
     soup = BeautifulSoup(html_content, "html.parser")
+    comp_name = safe_find_text(soup, 'h3', f'Competition_{prop_id}')
+    comp_name = re.sub(r'[\\/*?:"<>|]', "-", comp_name).strip()
+    comp_date = parse_date(safe_find_text(soup, 'h4', ''))
     
-    if DEBUG:
-        # Debug: Save the HTML to check what we're receiving
-        with open('debug_output.html', 'w', encoding='utf-8') as f:
-            f.write(html_content)
-        debug_print("Saved HTML to debug_output.html for inspection")
-        
-        # Show first 500 characters of what we received
-        debug_print(f"\nFirst 500 characters of response:")
-        debug_print("-" * 60)
-        debug_print(html_content[:500])
-        debug_print("-" * 60)
-        debug_print(f"\nSearching for key content...")
-        
-        # Look for common error messages or indicators
-        lower_content = html_content.lower()
-        if 'error' in lower_content:
-            debug_print("⚠ Found 'error' in page content")
-        if 'not found' in lower_content or '404' in lower_content:
-            debug_print("⚠ Page indicates content not found")
-        if 'competition' in lower_content:
-            debug_print("✓ Found 'competition' in page")
-        if 'result' in lower_content:
-            debug_print("✓ Found 'result' in page")
-    
-    # Extract competition name
-    comp_name = safe_find_text(soup, 'h3', 'Unknown_Competition')
-    comp_name = comp_name.replace("/", "-").replace("\\", "-")
-    
-    # Extract and parse date
-    h4_text = safe_find_text(soup, 'h4', '')
-    debug_print(f"H4 text: '{h4_text}'")
-    comp_date = parse_date(h4_text)
-    debug_print(f"Parsed date: {comp_date}")
-    
-    # Get list of sessions
     print(f'{Colors.CYAN}Parsing sessions...{Colors.RESET}')
     select_tag = soup.find('select', id='id_sut')
-    
     if not select_tag:
         print(f"{Colors.RED}✗ Select tag not found.{Colors.RESET}")
-        
-        # Check if it's because sessions are in progress
-        lower_content = html_content.lower()
-        if 'in progress' in lower_content or 'live' in lower_content or comp_name != 'Unknown_Competition':
-            print(f"{Colors.YELLOW}ℹ The competition sessions may still be in progress.{Colors.RESET}")
-            print(f"{Colors.YELLOW}  Results will be available once the sessions are completed.{Colors.RESET}")
-        else:
-            print(f"{Colors.YELLOW}  Wrong prop_id or the website structure has changed.{Colors.RESET}")
-        
-        if DEBUG:
-            print("\nDebugging information:")
-            print(f"  - Page title: {soup.find('title').get_text() if soup.find('title') else 'Not found'}")
-            print(f"  - Page contains {len(soup.find_all())} total HTML elements")
-            print(f"  - H3 tags found: {len(soup.find_all('h3'))}")
-            print(f"  - H4 tags found: {len(soup.find_all('h4'))}")
-            print(f"  - Select tags found: {len(soup.find_all('select'))}")
-            print("\nCheck debug_output.html to see what the page actually returned.")
-            print("The site may require cookies, JavaScript, or specific session handling.")
-        else:
-            print(f"{Colors.YELLOW}Run with --debug flag for more information.{Colors.RESET}")
+        print(f"{Colors.YELLOW}ℹ The competition sessions may still be in progress or empty.{Colors.RESET}")
         return
-    
-    all_data = []
+
+    all_rows = []
+    # Base headers ensures these exist even if table is empty
+    all_headers = set(['Session', 'Name', 'YOB', 'Club', 'Score', 'Date']) 
     in_progress_count = 0
+    
     options = select_tag.find_all('option')
-    
-    if not options:
-        print(f"{Colors.YELLOW}No sessions found. Exiting...{Colors.RESET}")
-        return
-    
     for option in options:
         value = option.get('value')
         session_name = option.get_text().strip()
+        if value in ["0", ""]: continue
         
-        result_url = (
-            f"https://ksis.eu/load_result_total_ksismg_art.php?"
-            f"lang=en&id_prop={prop_id}&id_sut={value}&rn=null&mn=null"
-            f"&state=-1&age_group=&award=-1&nacinie=undefined"
-        )
-        
+        result_url = (f"https://ksis.eu/load_result_total_ksismg_art.php?lang=en&id_prop={prop_id}&id_sut={value}&rn=null&mn=null&state=-1&age_group=&award=-1&nacinie=undefined")
         result_content = fetch_url(result_url)
         if not result_content:
             in_progress_count += 1
-            print(f"{Colors.YELLOW}  ✗ {session_name}: Could not fetch results{Colors.RESET}")
+            print(f"{Colors.YELLOW} ✗ {session_name}: Could not fetch results{Colors.RESET}")
             continue
         
-        soup2 = BeautifulSoup(result_content, "html.parser")
-        table = soup2.find('table', attrs={'id': 'myTablePrihlasky'})
-        
+        table = BeautifulSoup(result_content, "html.parser").find('table', id='myTablePrihlasky')
         if not table:
-            debug_print(f"    Warning: No results table found for session {session_name}")
             in_progress_count += 1
-            print(f"{Colors.YELLOW}  ⚠ {session_name}: No results table found (session may be in progress){Colors.RESET}")
+            print(f"{Colors.YELLOW} ⚠ {session_name}: No results table found (session may be in progress){Colors.RESET}")
             continue
-        
-        # Parse data from table
+
+        # Header Parsing
+        headers = []
+        thead = table.find('thead')
+        if thead and thead.find_all('tr'):
+             headers = [h.get_text(strip=True) for h in thead.find_all('tr')[-1].find_all(['th', 'td'])]
+        if not headers:
+            first = table.find('tr')
+            if first: headers = [h.get_text(strip=True) for h in first.find_all(['th', 'td'])]
+
+        for h in headers:
+            clean = h.strip()
+            if clean in RENAME_MAP: clean = RENAME_MAP[clean]
+            if clean and clean not in DROP_COLS: all_headers.add(clean)
+
+        data_rows = table.find('tbody').find_all('tr') if table.find('tbody') else table.find_all('tr')
+        if not thead and data_rows and len(data_rows[0].find_all('td')) == len(headers):
+             data_rows = data_rows[1:]
+             
         row_count = 0
-        for row in table.find_all('tr'):
-            cells = row.find_all(['td'])
-            if len(cells) < 9:  # Ensure we have enough cells
-                continue
-            
-            row_data = [str(cell) for cell in cells]
-            athlete_data = parse_athlete_row(row_data)
-            
-            if athlete_data:
-                all_data.append([session_name] + athlete_data + [comp_date])
+        for tr in data_rows:
+            row_data = parse_row_data(tr, headers)
+            if row_data:
+                row_data['Session'] = session_name
+                row_data['Date'] = comp_date
+                all_rows.append(row_data)
                 row_count += 1
         
-        # Check if session is in progress (has LIVE in name or 0 athletes)
-        if row_count == 0:
-            in_progress_count += 1
-            if 'live' in session_name.lower() or 'in progress' in session_name.lower():
-                print(f"{Colors.YELLOW}  ⚠ {session_name}: Session is in progress{Colors.RESET}")
-            else:
-                print(f"{Colors.YELLOW}  ⚠ {session_name}: No athletes found (may be in progress){Colors.RESET}")
-        else:
+        if row_count > 0:
             print(f"  {Colors.GREEN}✓{Colors.RESET} {session_name}: {row_count} athletes")
-    
-    # Write CSV file
-    if all_data:
-        # Add timestamp to filename
-        timestamp = datetime.now().strftime('%Y%m%d%H%M')
-        file_path = f'{comp_name}-{timestamp}.csv'
+        else:
+            in_progress_count += 1
+            print(f"{Colors.YELLOW}  ⚠ {session_name}: No athletes found (may be in progress){Colors.RESET}")
+
+    if all_rows:
+        filename = f'{comp_name}-{datetime.now().strftime("%Y%m%d%H%M")}.csv'
         
-        with open(file_path, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.writer(csvfile, delimiter=',')
-            writer.writerow(['Session', 'Name', 'Club', 'YOB', 'Score', 'Date'])  # Header
-            writer.writerows(all_data)
-        print(f"\n{Colors.GREEN}{Colors.BOLD}✓ Successfully created {file_path} with {len(all_data)} records.{Colors.RESET}")
+        # Priority Order
+        priority = ['Session', 'Name', 'YOB', 'Club', 'Score', 'Date']
+        others = [h for h in all_headers if h not in priority and h not in DROP_COLS]
+        final_headers = priority + sorted(others)
         
-        # Show in-progress sessions count if any
+        try:
+            with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=final_headers, extrasaction='ignore')
+                writer.writeheader()
+                writer.writerows(all_rows)
+            print(f"\n{Colors.GREEN}{Colors.BOLD}✓ Successfully created {filename} with {len(all_rows)} records.{Colors.RESET}")
+        except PermissionError:
+             print(f"{Colors.RED}ERROR: Could not write to file. Is it open in Excel?{Colors.RESET}")
+        
         if in_progress_count > 0:
             print(f"{Colors.MAGENTA}{Colors.BOLD}ℹ {in_progress_count} session(s) still in progress{Colors.RESET}")
     else:
@@ -463,7 +480,7 @@ def interactive_menu():
     """Display interactive menu and handle user choices."""
     while True:
         print(f"\n{Colors.BOLD}{Colors.CYAN}╔═══════════════════════════════════════╗{Colors.RESET}")
-        print(f"{Colors.BOLD}{Colors.CYAN}║    KSIS Competition Results Tool      ║{Colors.RESET}")
+        print(f"{Colors.BOLD}{Colors.CYAN}║     KSIS Competition Results Tool     ║{Colors.RESET}")
         print(f"{Colors.BOLD}{Colors.CYAN}╚═══════════════════════════════════════╝{Colors.RESET}")
         print(f"\n{Colors.BOLD}Select an option:{Colors.RESET}")
         print(f"{Colors.CYAN}1.{Colors.RESET} List all competitions")
@@ -494,8 +511,7 @@ def interactive_menu():
                 print(f"{Colors.RED}No keyword provided.{Colors.RESET}")
         
         elif choice == '4':
-            prop_id = get_prop_id()
-            export_results(prop_id)
+            export_results(get_prop_id())
         
         elif choice == '5':
             print(f"\n{Colors.CYAN}Goodbye!{Colors.RESET}")
@@ -507,7 +523,6 @@ def interactive_menu():
 def main():
     global DEBUG
     
-    # Parse command line arguments
     parser = argparse.ArgumentParser(
         description='Parse KSIS competition results and export to CSV',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -519,38 +534,21 @@ Examples:
   python ksis_export.py --debug --prop-id 8819  # Export with debug output
         """
     )
-    parser.add_argument(
-        '--debug', '-d',
-        action='store_true',
-        help='Enable debug output for troubleshooting'
-    )
-    parser.add_argument(
-        '--prop-id',
-        type=str,
-        help='Competition prop_id to export (skips interactive menu)'
-    )
-    parser.add_argument(
-        '--list', '-l',
-        action='store_true',
-        help='List available competitions and exit'
-    )
+    parser.add_argument('--debug', '-d', action='store_true', help='Enable debug output for troubleshooting')
+    parser.add_argument('--prop-id', type=str, help='Competition prop_id to export (skips interactive menu)')
+    parser.add_argument('--list', '-l', action='store_true', help='List available competitions and exit')
     
     args = parser.parse_args()
     DEBUG = args.debug
     
-    # Handle different modes
     if args.list:
-        # Just list competitions and exit
         list_competitions()
     elif args.prop_id:
-        # Export specific competition
-        prop_id = args.prop_id.strip()
-        if not prop_id.isdigit():
+        if not args.prop_id.isdigit():
             print(f"{Colors.RED}Error: prop_id must be a number{Colors.RESET}")
             return
-        export_results(prop_id)
+        export_results(args.prop_id)
     else:
-        # Interactive menu mode
         interactive_menu()
 
 if __name__ == "__main__":

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KSIS Competition Results Tool - User Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        nav {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 2px solid #e9ecef;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        nav h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        nav ul {
+            list-style: none;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        nav a {
+            color: #667eea;
+            text-decoration: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        nav a:hover {
+            background: #667eea;
+            color: white;
+        }
+        
+        main {
+            padding: 40px;
+        }
+        
+        section {
+            margin-bottom: 50px;
+        }
+        
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        h3 {
+            color: #764ba2;
+            font-size: 1.5em;
+            margin: 30px 0 15px 0;
+        }
+        
+        h4 {
+            color: #555;
+            font-size: 1.2em;
+            margin: 20px 0 10px 0;
+        }
+        
+        p {
+            margin-bottom: 15px;
+        }
+        
+        ul, ol {
+            margin: 15px 0 15px 30px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+        
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .note {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .tip {
+            background: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        footer {
+            background: #2d2d2d;
+            color: white;
+            text-align: center;
+            padding: 30px;
+        }
+        
+        .example-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .green { color: #4ec9b0; }
+        .cyan { color: #4fc1ff; }
+        .yellow { color: #dcdcaa; }
+        .red { color: #f48771; }
+        .magenta { color: #c586c0; }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .container {
+                box-shadow: none;
+            }
+            
+            nav {
+                display: none;
+            }
+            
+            section {
+                page-break-inside: avoid;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            main {
+                padding: 20px;
+            }
+            
+            nav ul {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎯 KSIS Competition Results Tool</h1>
+            <p>Complete User Guide & Documentation</p>
+        </header>
+        
+        <nav>
+            <h3>Quick Navigation</h3>
+            <ul>
+                <li><a href="#installation">Installation</a></li>
+                <li><a href="#quick-start">Quick Start</a></li>
+                <li><a href="#features">Features</a></li>
+                <li><a href="#menu-guide">Menu Guide</a></li>
+                <li><a href="#command-line">Command Line</a></li>
+                <li><a href="#excel">Excel Corrections</a></li>
+                <li><a href="#troubleshooting">Troubleshooting</a></li>
+            </ul>
+        </nav>
+        
+        <main>
+            <section id="installation">
+                <h2>📦 Installation</h2>
+                
+                <h3>Step 1: Install Python</h3>
+                
+                <h4>Windows</h4>
+                <ol>
+                    <li>Download Python from <a href="https://www.python.org/downloads/" target="_blank">python.org/downloads</a></li>
+                    <li>Run the installer</li>
+                    <li><strong>IMPORTANT:</strong> Check "Add Python to PATH" during installation</li>
+                    <li>Click "Install Now"</li>
+                    <li>Verify installation by opening Command Prompt and typing:</li>
+                </ol>
+                <pre><code>python --version</code></pre>
+                
+                <h4>macOS</h4>
+                <ol>
+                    <li>Download Python from <a href="https://www.python.org/downloads/" target="_blank">python.org/downloads</a></li>
+                    <li>Run the installer package</li>
+                    <li>Follow the installation wizard</li>
+                    <li>Verify installation by opening Terminal and typing:</li>
+                </ol>
+                <pre><code>python3 --version</code></pre>
+                
+                <h4>Linux</h4>
+                <p>Most Linux distributions come with Python pre-installed. If not:</p>
+                <pre><code>sudo apt-get update
+sudo apt-get install python3 python3-pip</code></pre>
+                
+                <h3>Step 2: Install Required Packages</h3>
+                <p>Open your terminal/command prompt and navigate to the folder containing <code>ksis_export.py</code>, then run:</p>
+                <pre><code>pip install requests beautifulsoup4</code></pre>
+                
+                <div class="tip">
+                    <strong>💡 For Excel corrections feature (optional but recommended):</strong>
+                    <pre><code>pip install pandas openpyxl</code></pre>
+                </div>
+                
+                <p>If you're on macOS/Linux and <code>pip</code> doesn't work, try:</p>
+                <pre><code>pip3 install requests beautifulsoup4 pandas openpyxl</code></pre>
+                
+                <h3>Step 3: Verify Installation</h3>
+                <p>Run the script to test:</p>
+                <pre><code>python ksis_export.py</code></pre>
+                <p>You should see the interactive menu appear.</p>
+            </section>
+            
+            <section id="quick-start">
+                <h2>🚀 Quick Start</h2>
+                
+                <h3>Basic Usage (Interactive Mode)</h3>
+                <ol>
+                    <li>Open your terminal/command prompt</li>
+                    <li>Navigate to the script folder:
+                        <pre><code>cd path/to/script/folder</code></pre>
+                    </li>
+                    <li>Run the script:
+                        <pre><code>python ksis_export.py</code></pre>
+                    </li>
+                    <li>Choose option <strong>1</strong> to see all available competitions</li>
+                    <li>Note the prop_id of the competition you want</li>
+                    <li>Choose option <strong>4</strong> and enter the prop_id</li>
+                    <li>The CSV file will be created in the same folder</li>
+                </ol>
+                
+                <h3>Example Session</h3>
+                <div class="example-output">
+<span class="cyan">$ python ksis_export.py<br><br></span>
+
+<span class="cyan">╔═══════════════════════════════════════╗<br>
+║     KSIS Competition Results Tool &nbsp; &nbsp; &nbsp; &nbsp;     ║<br>
+╚═══════════════════════════════════════╝</span>
+<br><br>
+Select an option:<br>
+<span class="cyan">1.</span> List all competitions<br>
+<span class="cyan">2.</span> List live competitions only<br>
+<span class="cyan">3.</span> Search competitions by keyword<br>
+<span class="cyan">4.</span> Export results by prop_id (single or comma-separated list)<br>
+<span class="cyan">5.</span> Search & Export by Date Range<br>
+<span class="cyan">6.</span> Exit<br>
+<br>
+<span class="cyan">Enter your choice (1-6):</span> 1<br>
+<br>
+[Competition list appears...]<br>
+<br>
+<span class="cyan">Enter your choice (1-6):</span> 4<br>
+<span class="cyan">Enter prop_id (or comma-separated list like 8819,8820):</span> 8819<br>
+<br>
+[Export begins...]<br>
+<span class="green">✓ Successfully created Competition_Name-202501181435.csv with 156 records.</span><br>
+                </div>
+            </section>
+            
+            <section id="features">
+                <h2>✨ Features Overview</h2>
+                
+                <h3>1. List All Competitions</h3>
+                <ul>
+                    <li>Shows all Canadian Women's Artistic Gymnastics competitions</li>
+                    <li>Displays prop_id, date, and competition name</li>
+                    <li>Indicates LIVE competitions with a red [LIVE] badge</li>
+                </ul>
+                
+                <h3>2. List Live Competitions Only</h3>
+                <ul>
+                    <li>Filters to show only competitions currently in progress</li>
+                    <li>Useful for tracking ongoing events</li>
+                </ul>
+                
+                <h3>3. Search by Keyword</h3>
+                <ul>
+                    <li>Search competition names by keyword</li>
+                    <li>Case-insensitive search</li>
+                    <li>Example: Search "Provincial" to find all provincial championships</li>
+                </ul>
+                
+                <h3>4. Export Results</h3>
+                <ul>
+                    <li><strong>Single competition:</strong> Enter one prop_id (e.g., <code>8819</code>)</li>
+                    <li><strong>Multiple competitions:</strong> Enter comma-separated list (e.g., <code>8819,8820,8821</code>)</li>
+                    <li>Creates timestamped CSV file(s)</li>
+                    <li>Automatically handles name reordering and club standardization</li>
+                </ul>
+                
+                <h3>5. Search & Export by Date Range</h3>
+                <ul>
+                    <li>Find all competitions within a date range</li>
+                    <li>Option to export all matches to a single aggregated file</li>
+                    <li>Perfect for season summaries or regional analysis</li>
+                </ul>
+                
+                <h3>6. Name Reordering</h3>
+                <p>Automatically converts "Last First" to "First Last" format:</p>
+                <ul>
+                    <li>Simple names (2 words) are handled automatically</li>
+                    <li>Multi-word names prompt you for confirmation</li>
+                    <li>Your choices are saved to avoid repeated prompts</li>
+                </ul>
+                
+                <div class="example-output"><span class="yellow">Multiple-word name detected: Rohas De Suza Mary Elizabeth</span><br>
+<span class="cyan">This name is in 'Last First' format. Where does the LAST name end?</span><br>
+<span class="cyan">1.</span> Last: <strong>Rohas</strong>, First: <strong>De Suza Mary Elizabeth</strong> → <span class="green">De Suza Mary Elizabeth Rohas</span><br>
+<span class="cyan">2.</span> Last: <strong>Rohas De</strong>, First: <strong>Suza Mary Elizabeth</strong> → <span class="green">Suza Mary Elizabeth Rohas De</span><br>
+<span class="cyan">3.</span> Last: <strong>Rohas De Suza</strong>, First: <strong>Mary Elizabeth</strong> → <span class="green">Mary Elizabeth Rohas De Suza</span><br>
+<span class="cyan">4.</span> Last: <strong>Rohas De Suza Mary</strong>, First: <strong>Elizabeth</strong> → <span class="green">Elizabeth Rohas De Suza Mary</span><br>
+<span class="cyan">Enter choice (1-4):</span> 3
+                </div>
+            </section>
+            
+            <section id="menu-guide">
+                <h2>📋 Interactive Menu Guide</h2>
+                
+                <h3>Menu Option 1: List All Competitions</h3>
+                <div class="example-output"><span class="cyan">Enter your choice (1-6):</span> 1
+<br><br>
+Available Competitions:<br>
+<span class="cyan">ID       Date         Competition Name</span><br>
+--------------------------------------------------------------------------------<br>
+<span class="green">9045</span>     2026-01-18   Ontario Winter Games 2026<br>
+<span class="green">9012</span>     2026-01-11   Provincial Championships <span class="red">[LIVE]</span><br>
+<span class="green">8819</span>     2025-12-15   Ottawa Invitational
+<br><br>
+Total: 3 competitions
+                </div>
+                
+                <h3>Menu Option 4: Export Results</h3>
+                
+                <h4>Single Competition:</h4>
+                <div class="example-output"><span class="cyan">Enter your choice (1-6):</span> 4<br>
+<span class="cyan">Enter prop_id (or comma-separated list like 8819,8820):</span> 8819
+<br><br>
+<span class="cyan">Fetching competition data (prop_id: 8819)...</span><br>
+<span class="cyan">Parsing sessions for "Ottawa Invitational"...</span><br>
+  <span class="green">✓</span> Level 4 (Age 10) WAG: 24 athletes<br>
+  <span class="green">✓</span> Level 5 (Age 11-12) WAG: 18 athletes<br>
+  <span class="yellow">⚠ Level 6 (Age 13) WAG - LIVE: Session is in progress</span>
+<br><br>
+<span class="green">✓ Successfully created Ottawa Invitational-202601181435.csv with 42 records.</span><br>
+<span class="magenta">ℹ 1 session(s) still in progress</span>
+                </div>
+                
+                <h4>Multiple Competitions:</h4>
+                <div class="example-output"><span class="cyan">Enter prop_id (or comma-separated list like 8819,8820):</span> 8819,8820,8821
+<br><br>
+<span class="cyan">Starting Aggregated Export for 3 competitions...</span><br>
+[Processing each competition...]
+<br><br>
+<span class="green">✓ Successfully created Aggregated_Manual_List_3_Comps-202601181435.csv with 156 records.</span><br>
+  Sessions completed: 12<br>
+<span class="magenta">ℹ 2 session(s) still in progress</span>
+                </div>
+                
+                <h3>Menu Option 5: Date Range Export</h3>
+                <div class="example-output"><span class="cyan">Enter your choice (1-6):</span> 5
+<br><br>
+<span class="cyan">--- Date Range Search ---</span><br>
+<span class="cyan">Enter Start Date (YYYY-MM-DD):</span> 2025-12-01<br>
+<span class="cyan">Enter End Date   (YYYY-MM-DD):</span> 2025-12-31
+<br><br>
+<span class="green">Found 5 competition(s) in range:</span><br>
+  <span class="cyan">2025-12-05</span>: Winter Cup Qualifier (ID: 8801)<br>
+  <span class="cyan">2025-12-12</span>: Holiday Classic (ID: 8815)<br>
+  <span class="cyan">2025-12-15</span>: Ottawa Invitational (ID: 8819)
+<br><br>
+<span class="cyan">Export all 5 competitions to one file? (y/n):</span> y
+<br><br>
+[Aggregated export begins...]<br>
+<span class="green">✓ Successfully created Aggregated_Results_2025-12-01_to_2025-12-31.csv</span>
+                </div>
+            </section>
+            
+            <section id="command-line">
+                <h2>⌨️ Command Line Usage</h2>
+                
+                <h3>Basic Syntax</h3>
+                <pre><code>python ksis_export.py [OPTIONS]</code></pre>
+                
+                <h3>Available Options</h3>
+                <table>
+                    <tr>
+                        <th>Option</th>
+                        <th>Short</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td><code>--list</code></td>
+                        <td><code>-l</code></td>
+                        <td>List all competitions and exit</td>
+                    </tr>
+                    <tr>
+                        <td><code>--prop-id ID</code></td>
+                        <td></td>
+                        <td>Export specific competition (skip menu)</td>
+                    </tr>
+                    <tr>
+                        <td><code>--debug</code></td>
+                        <td><code>-d</code></td>
+                        <td>Enable detailed debug output</td>
+                    </tr>
+                </table>
+                
+                <h3>Examples</h3>
+                
+                <h4>List competitions:</h4>
+                <pre><code>python ksis_export.py --list</code></pre>
+                
+                <h4>Export single competition:</h4>
+                <pre><code>python ksis_export.py --prop-id 8819</code></pre>
+                
+                <h4>Export with debug output:</h4>
+                <pre><code>python ksis_export.py --debug --prop-id 8819</code></pre>
+                
+                <h4>Export multiple competitions:</h4>
+                <pre><code>python ksis_export.py --prop-id 8819,8820,8821</code></pre>
+            </section>
+            
+            <section id="excel">
+                <h2>📊 Excel Corrections</h2>
+                
+                <h3>Overview</h3>
+                <p>The script supports Excel-based correction files to standardize athlete names and club names. This is optional but highly recommended for consistent data.</p>
+                
+                <h3>Setting Up Corrections</h3>
+                
+                <h4>Club Name Corrections</h4>
+                <p>Create a file named <code>Club Name Corrections.xlsx</code> in the same folder as the script:</p>
+                
+                <table>
+                    <tr>
+                        <th>Original</th>
+                        <th>Corrected</th>
+                    </tr>
+                    <tr>
+                        <td>Club de gymnastique Les Sittelles ON</td>
+                        <td>Les Sittelles</td>
+                    </tr>
+                    <tr>
+                        <td>Ottawa Gymnastics Centre</td>
+                        <td>OGC</td>
+                    </tr>
+                    <tr>
+                        <td>Rideau Gymnastics ON Inc.</td>
+                        <td>Rideau Gymnastics</td>
+                    </tr>
+                </table>
+                
+                <div class="note">
+                    <strong>File Format:</strong>
+                    <ul>
+                        <li>Column A: Original name (exactly as it appears in KSIS)</li>
+                        <li>Column B: Corrected/standardized name</li>
+                        <li>First row can optionally be headers ("Original", "Corrected")</li>
+                    </ul>
+                </div>
+                
+                <h4>Athlete Name Corrections</h4>
+                <p>Create a file named <code>Athlete Name Corrections.xlsx</code> in the same folder:</p>
+                
+                <table>
+                    <tr>
+                        <th>Original</th>
+                        <th>Corrected</th>
+                    </tr>
+                    <tr>
+                        <td>Rohas De Suza Mary Elizabeth</td>
+                        <td>Mary Elizabeth Rohas De Suza</td>
+                    </tr>
+                    <tr>
+                        <td>Smith Jones Anna</td>
+                        <td>Anna Smith Jones</td>
+                    </tr>
+                </table>
+                
+                <h3>How It Works</h3>
+                <ol>
+                    <li>When the script encounters a multi-word name, it prompts you</li>
+                    <li>You make a choice for how to split first/last name</li>
+                    <li>Your choice is automatically saved to <code>Athlete Name Corrections.xlsx</code></li>
+                    <li>Next time you see that name, it's handled automatically</li>
+                    <li>The corrections file builds up over time</li>
+                </ol>
+                
+                <h3>Benefits</h3>
+                <ul>
+                    <li><strong>Consistency:</strong> Same club/athlete names across all exports</li>
+                    <li><strong>Efficiency:</strong> No repeated prompts for known names</li>
+                    <li><strong>Sharing:</strong> Share correction files with teammates</li>
+                    <li><strong>Flexibility:</strong> Edit Excel files manually if needed</li>
+                </ul>
+            </section>
+            
+            <section id="troubleshooting">
+                <h2>🔧 Troubleshooting</h2>
+                
+                <h3>Common Issues</h3>
+                
+                <h4>"Module not found" Error</h4>
+                <div class="warning">
+                    <strong>Problem:</strong> Script says <code>ModuleNotFoundError: No module named 'requests'</code>
+                </div>
+                <div class="success">
+                    <strong>Solution:</strong>
+                    <pre><code>pip install requests beautifulsoup4</code></pre>
+                    <p>If that doesn't work, try:</p>
+                    <pre><code>python -m pip install requests beautifulsoup4</code></pre>
+                </div>
+                
+                <h4>"Python is not recognized" Error (Windows)</h4>
+                <div class="warning">
+                    <strong>Problem:</strong> Command prompt doesn't recognize <code>python</code> command
+                </div>
+                <div class="success">
+                    <strong>Solution:</strong>
+                    <ol>
+                        <li>Reinstall Python and check "Add Python to PATH"</li>
+                        <li>Or use full path: <code>C:\Python312\python.exe ksis_export.py</code></li>
+                    </ol>
+                </div>
+                
+                <h4>No Colors Showing (Windows)</h4>
+                <div class="warning">
+                    <strong>Problem:</strong> Terminal shows garbled text or no colors
+                </div>
+                <div class="success">
+                    <strong>Solution:</strong>
+                    <ul>
+                        <li>Use Windows Terminal (recommended) or PowerShell</li>
+                        <li>Command Prompt on Windows 10+ should work</li>
+                        <li>Colors work best in Windows Terminal (free from Microsoft Store)</li>
+                    </ul>
+                </div>
+                
+                <h4>"Permission Denied" When Writing CSV</h4>
+                <div class="warning">
+                    <strong>Problem:</strong> <code>ERROR: Could not write to file. Is it open in Excel?</code>
+                </div>
+                <div class="success">
+                    <strong>Solution:</strong>
+                    <ul>
+                        <li>Close the CSV file in Excel before running the script</li>
+                        <li>If file is open, script cannot overwrite it</li>
+                        <li>Save your work in Excel, close it, then re-run the script</li>
+                    </ul>
+                </div>
+                
+                <h4>Empty or Missing Data</h4>
+                <div class="warning">
+                    <strong>Problem:</strong> Competition shows "No athletes found"
+                </div>
+                <div class="success">
+                    <strong>Possible Causes:</strong>
+                    <ol>
+                        <li><strong>Session in progress:</strong> Wait for results to be posted</li>
+                        <li><strong>Wrong prop_id:</strong> Verify the ID from the competition list</li>
+                        <li><strong>Website structure changed:</strong> Run with <code>--debug</code> flag</li>
+                    </ol>
+                    <strong>Debug Mode:</strong>
+                    <pre><code>python ksis_export.py --debug --prop-id 8819</code></pre>
+                </div>
+                
+                <h3>Getting Help</h3>
+                <p>If you encounter issues not covered here:</p>
+                <ol>
+                    <li><strong>Run with debug mode:</strong>
+                        <pre><code>python ksis_export.py --debug --prop-id 8819</code></pre>
+                    </li>
+                    <li><strong>Check the console output</strong> for error messages</li>
+                    <li><strong>Verify files:</strong>
+                        <ul>
+                            <li>Script file: <code>ksis_export.py</code></li>
+                            <li>Output location: Same folder as script</li>
+                            <li>Permissions: Can write to folder</li>
+                        </ul>
+                    </li>
+                    <li><strong>Test basic functionality:</strong>
+                        <pre><code>python ksis_export.py --list</code></pre>
+                        <p>If this works, Python and modules are installed correctly.</p>
+                    </li>
+                </ol>
+            </section>
+            
+            <section id="output">
+                <h2>📄 Output Format</h2>
+                
+                <h3>CSV File Structure</h3>
+                <p>The exported CSV files contain the following columns:</p>
+                
+                <table>
+                    <tr>
+                        <th>Column</th>
+                        <th>Description</th>
+                    </tr>
+                    <tr>
+                        <td>Competition</td>
+                        <td>Competition name</td>
+                    </tr>
+                    <tr>
+                        <td>Session</td>
+                        <td>Session name (e.g., "Level 4 Age 10 WAG")</td>
+                    </tr>
+                    <tr>
+                        <td>Name</td>
+                        <td>Athlete name (First Last format)</td>
+                    </tr>
+                    <tr>
+                        <td>YOB</td>
+                        <td>Year of birth</td>
+                    </tr>
+                    <tr>
+                        <td>Club</td>
+                        <td>Club name (standardized)</td>
+                    </tr>
+                    <tr>
+                        <td>Score</td>
+                        <td>Final score</td>
+                    </tr>
+                    <tr>
+                        <td>Date</td>
+                        <td>Competition date (YYYY-MM-DD)</td>
+                    </tr>
+                    <tr>
+                        <td>[Additional]</td>
+                        <td>Other columns from results (apparatus scores, etc.)</td>
+                    </tr>
+                </table>
+                
+                <h3>File Naming Convention</h3>
+                
+                <h4>Single Competition:</h4>
+                <pre><code>Competition_Name-YYYYMMDDHHMM.csv</code></pre>
+                <p>Example: <code>Ottawa Invitational-202601181435.csv</code></p>
+                
+                <h4>Aggregated (Manual List):</h4>
+                <pre><code>Aggregated_Manual_List_N_Comps-YYYYMMDDHHMM.csv</code></pre
